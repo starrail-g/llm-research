@@ -94,3 +94,57 @@
     $J = \frac{1}{2m}\lVert X\boldsymbol{\theta}-\mathbf{y}\rVert^2, \quad \nabla J = \frac{1}{m}X^\top(X\boldsymbol{\theta}-\mathbf{y})$
     
 - **正则化扩展**：可在损失中加入 $L1$ 或 $L2$ 正则项，控制模型复杂度。
+## 🛡️ 二、线性回归的正则化扩展
+
+**为什么需要正则化？**  
+当特征很多或者存在**共线性**时，模型可能**过拟合**。  
+为了解决这个问题，我们可以在损失函数中加入**正则项**来惩罚参数过大。
+
+---
+
+### 🔹 1. L2 正则化（Ridge 回归）
+
+在原损失函数上加上所有参数的平方和：
+
+$J_{\text{ridge}}(\boldsymbol{\theta}) = \frac{1}{2m} \lVert X\boldsymbol{\theta} - \mathbf{y} \rVert^2 + \frac{\lambda}{2m} \lVert \boldsymbol{\theta}_{1:} \rVert^2$
+
+- $\lambda$：正则化强度（超参数）  
+- $\boldsymbol{\theta}_{1:}$：表示除偏置 $\theta_0$ 外的其余参数
+
+**梯度变为：**
+
+$\nabla J_{\text{ridge}} = \frac{1}{m} X^\top (X\boldsymbol{\theta} - \mathbf{y}) + \frac{\lambda}{m} \boldsymbol{\theta}_{1:}$
+
+> 🚀 Ridge 会抑制参数过大，提升模型泛化能力。
+
+---
+
+### 🔹 2. L1 正则化（Lasso 回归）
+
+在损失函数中加上参数绝对值的和：
+
+$J_{\text{lasso}}(\boldsymbol{\theta}) = \frac{1}{2m} \lVert X\boldsymbol{\theta} - \mathbf{y} \rVert^2 + \frac{\lambda}{m} \sum_{j=1}^{n} |\theta_j|$
+
+- **Lasso 优势**：可以产生稀疏解（即某些 $\theta_j = 0$），实现特征选择。  
+- **劣势**：绝对值不可导，不能用标准梯度下降求解，需用坐标下降、子梯度法等。
+
+---
+
+### 🔹 3. 弹性网（Elastic Net）
+
+将 L1 和 L2 结合：
+
+$J_{\text{elastic}} = \frac{1}{2m} \lVert X\boldsymbol{\theta} - \mathbf{y} \rVert^2 + \frac{\lambda_1}{m} \lVert \boldsymbol{\theta} \rVert_1 + \frac{\lambda_2}{2m} \lVert \boldsymbol{\theta} \rVert_2^2$
+
+适合处理特征高度相关的数据集。它同时具备 Lasso 的稀疏性与 Ridge 的稳定性。
+
+---
+
+### ✅ 正则化方法对比总结
+
+| 方法          | 正则项形式            | 优点             | 缺点        |
+| ----------- | ---------------- | -------------- | --------- |
+| 无正则         | 无                | 简单、直接          | 容易过拟合     |
+| Ridge (L2)  | $\|\theta\|_2^2$ | 稳定，防止过拟合       | 不会产生稀疏解   |
+| Lasso (L1)  | $\|\theta\|_1$   | 稀疏性，特征选择       | 解不稳定，优化复杂 |
+| Elastic Net | L1 + L2          | 综合 L1 和 L2 的优点 | 参数多，调参更复杂 |

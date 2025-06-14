@@ -1,141 +1,183 @@
+"""
+regression_examples.py
+
+Comprehensive implementations and usage examples for:
+1. Multiple Linear Regression (from scratch & scikit-learn)
+2. Logistic Regression (from scratch & scikit-learn)
+
+Code style: PEP8, type hints, docstrings, clear structure.
+"""
+
 import numpy as np
+import pandas as pd
+from typing import Optional
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import mean_squared_error, r2_score, accuracy_score, confusion_matrix
+from sklearn.linear_model import LinearRegression as SklearnLR, LogisticRegression as SklearnLogReg
+from sklearn.datasets import fetch_california_housing, load_breast_cancer
 
-class GLM:
+
+class MultipleLinearRegression:
     """
-    Generalized Linear Model implemented via Iteratively Reweighted Least Squares (IRLS).
-    Supports families: 'gaussian', 'binomial', 'poisson'.
+    Multiple Linear Regression using Normal Equation & Gradient Descent.
     """
-    def __init__(self, family='gaussian', link='identity', max_iter=100, tol=1e-6):
-        self.family = family
-        self.link = link
-        self.max_iter = max_iter
-        self.tol = tol
-        self.coef_ = None
-        self.intercept_ = None
 
-    def _link(self, mu):
-        if self.link == 'identity':
-            return mu
-        elif self.link == 'log':
-            return np.log(mu)
-        elif self.link == 'logit':
-            return np.log(mu / (1 - mu))
-        else:
-            raise ValueError(f"Unknown link: {self.link}")
-
-    def _link_inv(self, eta):
-        if self.link == 'identity':
-            return eta
-        elif self.link == 'log':
-            return np.exp(eta)
-        elif self.link == 'logit':
-            return 1 / (1 + np.exp(-eta))
-        else:
-            raise ValueError(f"Unknown link: {self.link}")
-
-    def _variance(self, mu):
-        if self.family == 'gaussian':
-            return np.ones_like(mu)
-        elif self.family == 'poisson':
-            return mu
-        elif self.family == 'binomial':
-            return mu * (1 - mu)
-        else:
-            raise ValueError(f"Unknown family: {self.family}")
-
-    def fit(self, X, y):
-        # Add intercept
-        X = np.hstack([np.ones((X.shape[0], 1)), X])
-        n_samples, n_features = X.shape
-        # Initialize coefficients
-        beta = np.zeros(n_features)
-
-        for iteration in range(self.max_iter):
-            eta = X @ beta
-            mu = self._link_inv(eta)
-            var_mu = self._variance(mu)
-            # Derivative of link: d_mu / d_eta
-            if self.link == 'identity':
-                mu_prime = np.ones_like(mu)
-            elif self.link == 'log':
-                mu_prime = mu
-            elif self.link == 'logit':
-                mu_prime = mu * (1 - mu)
-
-            # Working weights and dependent variable
-            z = eta + (y - mu) / mu_prime
-            W = (mu_prime**2) / var_mu
-            # Weighted least squares
-            WX = X * W[:, np.newaxis]
-            beta_new = np.linalg.pinv(WX.T @ X) @ (WX.T @ z)
-
-            # Check convergence
-            if np.max(np.abs(beta_new - beta)) < self.tol:
-                beta = beta_new
-                break
-            beta = beta_new
-
-        self.intercept_ = beta[0]
-        self.coef_ = beta[1:]
-        return self
-
-    def predict(self, X):
-        X = np.hstack([np.ones((X.shape[0], 1)), X])
-        eta = X @ np.concatenate([[self.intercept_], self.coef_])
-        return self._link_inv(eta)
-
-
-class LinearRegression:
-    """
-    Multivariate Linear Regression using Normal Equation or Gradient Descent.
-    """
-    def __init__(self, method='normal', lr=0.01, max_iter=1000, tol=1e-6):
-        self.method = method
+    def __init__(self,
+                 lr: float = 0.01,
+                 n_iters: int = 1000,
+                 fit_intercept: bool = True):
         self.lr = lr
-        self.max_iter = max_iter
-        self.tol = tol
-        self.coef_ = None
-        self.intercept_ = None
+        self.n_iters = n_iters
+        self.fit_intercept = fit_intercept
+        self.coef_: Optional[np.ndarray] = None
+        self.intercept_: float = 0.0
 
-    def fit(self, X, y):
-        n_samples, n_features = X.shape
-        # Add intercept column
-        X_b = np.hstack([np.ones((n_samples, 1)), X])
+    def _add_intercept(self, X: np.ndarray) -> np.ndarray:
+        if not self.fit_intercept:
+            return X
+        ones = np.ones((X.shape[0], 1))
+        return np.concatenate((ones, X), axis=1)
 
-        if self.method == 'normal':
-            # Closed-form solution: beta = (X^T X)^(-1) X^T y
-            beta = np.linalg.pinv(X_b.T @ X_b) @ X_b.T @ y
-        elif self.method == 'gd':
-            # Gradient Descent
-            beta = np.zeros(n_features + 1)
-            for i in range(self.max_iter):
-                y_pred = X_b @ beta
-                grad = (2 / n_samples) * (X_b.T @ (y_pred - y))
-                beta_new = beta - self.lr * grad
-                if np.linalg.norm(beta_new - beta, ord=2) < self.tol:
-                    beta = beta_new
-                    break
-                beta = beta_new
+    def fit_normal(self, X: np.ndarray, y: np.ndarray) -> None:
+        """
+        Fit model using the Normal Equation: (X^T X)^{-1} X^T y
+        """
+        X_b = self._add_intercept(X)
+        theta = np.linalg.pinv(X_b.T.dot(X_b)).dot(X_b.T).dot(y)
+        if self.fit_intercept:
+            self.intercept_ = float(theta[0])
+            self.coef_ = theta[1:]
         else:
-            raise ValueError(f"Unknown method: {self.method}")
+            self.coef_ = theta
+            self.intercept_ = 0.0
 
-        self.intercept_ = beta[0]
-        self.coef_ = beta[1:]
-        return self
+    def fit_gd(self, X: np.ndarray, y: np.ndarray) -> None:
+        """
+        Fit model using Batch Gradient Descent.
+        """
+        X_b = self._add_intercept(X)
+        m, n = X_b.shape
+        theta = np.zeros(n)
 
-    def predict(self, X):
-        return X @ self.coef_ + self.intercept_
+        for _ in range(self.n_iters):
+            gradients = (1 / m) * X_b.T.dot(X_b.dot(theta) - y)
+            theta -= self.lr * gradients
+
+        if self.fit_intercept:
+            self.intercept_ = float(theta[0])
+            self.coef_ = theta[1:]
+        else:
+            self.coef_ = theta
+            self.intercept_ = 0.0
+
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        """
+        Predict target values for X.
+        """
+        return X.dot(self.coef_) + self.intercept_
 
 
-# Example usage:
-# X = np.random.randn(100, 3)
-# beta_true = np.array([1.5, -2.0, 0.5])
-# y = X @ beta_true + np.random.randn(100) * 0.1
-# lr = LinearRegression(method='normal')
-# lr.fit(X, y)
-# print(lr.intercept_, lr.coef_)
+class LogisticRegression:
+    """
+    Binary Logistic Regression using Batch Gradient Descent.
+    """
 
-# glm = GLM(family='poisson', link='log')
-# y_poisson = np.random.poisson(lam=np.exp(X @ beta_true))
-# glm.fit(X, y_poisson)
-# print(glm.intercept_, glm.coef_)
+    def __init__(self,
+                 lr: float = 0.01,
+                 n_iters: int = 1000,
+                 fit_intercept: bool = True):
+        self.lr = lr
+        self.n_iters = n_iters
+        self.fit_intercept = fit_intercept
+        self.coef_: Optional[np.ndarray] = None
+        self.intercept_: float = 0.0
+
+    def _sigmoid(self, z: np.ndarray) -> np.ndarray:
+        return 1 / (1 + np.exp(-z))
+
+    def _add_intercept(self, X: np.ndarray) -> np.ndarray:
+        if not self.fit_intercept:
+            return X
+        ones = np.ones((X.shape[0], 1))
+        return np.concatenate((ones, X), axis=1)
+
+    def fit(self, X: np.ndarray, y: np.ndarray) -> None:
+        X_b = self._add_intercept(X)
+        m, n = X_b.shape
+        theta = np.zeros(n)
+
+        for _ in range(self.n_iters):
+            z = X_b.dot(theta)
+            predictions = self._sigmoid(z)
+            gradients = (1 / m) * X_b.T.dot(predictions - y)
+            theta -= self.lr * gradients
+
+        if self.fit_intercept:
+            self.intercept_ = float(theta[0])
+            self.coef_ = theta[1:]
+        else:
+            self.coef_ = theta
+            self.intercept_ = 0.0
+
+    def predict_proba(self, X: np.ndarray) -> np.ndarray:
+        return self._sigmoid(X.dot(self.coef_) + self.intercept_)
+
+    def predict(self, X: np.ndarray, threshold: float = 0.5) -> np.ndarray:
+        probs = self.predict_proba(X)
+        return (probs >= threshold).astype(int)
+
+
+def main():
+    # 多元线性回归示例（California housing）
+    housing = fetch_california_housing()
+    X_lin, y_lin = housing.data, housing.target
+    X_train_lin, X_test_lin, y_train_lin, y_test_lin = \
+        train_test_split(X_lin, y_lin, test_size=0.2, random_state=42)
+
+    # 特征缩放
+    scaler = StandardScaler()
+    X_train_lin = scaler.fit_transform(X_train_lin)
+    X_test_lin = scaler.transform(X_test_lin)
+
+    # from scratch
+    mlr = MultipleLinearRegression(lr=0.1, n_iters=1000)
+    mlr.fit_gd(X_train_lin, y_train_lin)
+    y_pred_lin = mlr.predict(X_test_lin)
+    print("[Scratch] MLR MSE:", mean_squared_error(y_test_lin, y_pred_lin))
+    print("[Scratch] MLR R2:", r2_score(y_test_lin, y_pred_lin))
+
+    # scikit-learn
+    skl_lr = SklearnLR()
+    skl_lr.fit(X_train_lin, y_train_lin)
+    y_pred_skl = skl_lr.predict(X_test_lin)
+    print("[Sklearn] LR MSE:", mean_squared_error(y_test_lin, y_pred_skl))
+    print("[Sklearn] LR R2:", r2_score(y_test_lin, y_pred_skl))
+
+    # 逻辑回归示例
+    cancer = load_breast_cancer()
+    X_log, y_log = cancer.data, cancer.target
+    X_train_log, X_test_log, y_train_log, y_test_log = \
+        train_test_split(X_log, y_log, test_size=0.2, random_state=42)
+
+    # 标准化
+    X_train_log = scaler.fit_transform(X_train_log)
+    X_test_log = scaler.transform(X_test_log)
+
+    # from scratch
+    logr = LogisticRegression(lr=0.1, n_iters=1000)
+    logr.fit(X_train_log, y_train_log)
+    y_pred_log = logr.predict(X_test_log)
+    print("[Scratch] LogReg Accuracy:", accuracy_score(y_test_log, y_pred_log))
+    print("[Scratch] LogReg Confusion Matrix:\n", confusion_matrix(y_test_log, y_pred_log))
+
+    # scikit-learn
+    skl_log = SklearnLogReg(max_iter=1000)
+    skl_log.fit(X_train_log, y_train_log)
+    y_pred_skl_log = skl_log.predict(X_test_log)
+    print("[Sklearn] LogReg Accuracy:", accuracy_score(y_test_log, y_pred_skl_log))
+    print("[Sklearn] LogReg Confusion Matrix:\n", confusion_matrix(y_test_log, y_pred_skl_log))
+
+
+if __name__ == "__main__":
+    main()
